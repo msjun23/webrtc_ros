@@ -1,0 +1,602 @@
+<html>
+<head>
+<meta charset="UTF-8">
+<title>WebRTC P2P Signalling Example</title>
+<style>
+
+body {
+	text-align: center;
+	margin:0px;
+}
+video {
+	width: 100%;
+	height: 95%;
+	margin:0px;
+
+}
+textarea {
+	width: 80%
+}
+</style>
+</head>
+
+<body>
+<div id="users">
+<ul id="user_list">
+</ul>
+<button id="open_video" onclick="sendInvite()" hidden> Open Video </button>
+<button id="open_peer" onclick="openPeer()" hidden> Open Peer </button>
+<button id="list_user" onclick="sendShowlist()" hidden> List User </button>
+<button id="info_user" onclick="sendShowinfo()" hidden> Info User </button>
+<button id="on_connect" onclick="onConnect()" hidden> Disconnect </button>
+</div>
+<br />
+<div id="display">
+	<video id="local_video" autoplay hidden></video>
+	<video id="remote_video" poster="img/rabit.png" autoplay></video>
+</div>
+<br />
+<div id="control">
+	<textarea id="logs" rows="7" hidden></textarea>
+</div>
+<div>
+<!--<h4>Powered by 🕷 Spider media web server, (C)TeamGRIT, Inc.</h4>-->
+</div>
+</body>
+
+
+<script>
+'use strict';
+let room_id = 'c3tu2liteh5quq167cc0'    // for testing room
+let channel_id = 'bq5an4ug10l3jia3h0o0' // for testing channel
+let peer = null;
+let conn = null;
+let local_stream = null;
+let myself = null;
+let userlist = null;
+let on_connect = true;
+let remote_message = null;
+let dc_con = null;
+let is_target = false;
+
+var logs = document.querySelector('#logs')
+var wsurl = ""
+
+function clearText() {
+	logs.value = "";
+}
+
+function getData(){
+	return remote_message
+}
+
+function sendData(message) {
+	if (is_target) {
+    	dc_con.send(JSON.stringify(message))
+    	console.log("imsending")
+    }
+}
+
+function writeText(text) {
+	logs.value += text
+}
+
+// -------------------------------------------------------------------------
+function onConnect() {
+    if (on_connect) {
+        document.getElementById('on_connect').innerHTML = ' Connect '
+        on_connect = false;
+        sendUnregister(myself)
+        myself= null;
+        closeLocalVideo()
+        clearConnection()
+        writeText("> signal is disconnected.\n")
+    } else {
+        document.getElementById('on_connect').innerHTML = ' Disconnect '
+        on_connect = true;
+        sendRegister()
+        writeText("> signal is connected.\n")
+    }
+}
+
+function clearConnection() {
+    clearList()
+    closeRemoteVideo()
+    closePeer()
+}
+
+function checkStatus() {
+    // if current target is disappered, clear the peer and its video
+    if (myself.target_id && getNameById(myself.target_id) == null) {
+        myself.target_id = null
+        clearConnection()
+        openPeer()
+    }
+}
+
+function getNameById(uid) { // check if id is valid
+    for (let user of userlist.values()) {
+        if (user.client_id === uid) {
+            return user.client_name
+        }
+    }
+    return null
+}
+
+// -------------------------------------------------------------------------
+function sendShowlist() {
+    if (myself === null) {
+        alert("user not registered.")
+        return
+    }
+    conn.send(JSON.stringify({
+        type: 'showlist',
+    }));
+}
+
+function clearList() {
+    var newList = document.getElementById('user_list')
+    // clear the existing user list
+    while (newList.lastElementChild) {
+        newList.removeChild(newList.lastElementChild);
+    }
+}
+
+function recvShowlist(data) {
+    userlist = JSON.parse(data)
+    // console.log(userlist)
+    var newList = document.getElementById('user_list')
+    // clear the existing user list
+    while (newList.lastElementChild) {
+        newList.removeChild(newList.lastElementChild);
+    }
+    // display a new user list
+    for (let user of userlist.values()) {
+        console.log(user)
+        writeText("(user) " + "id: " + user.client_id + ", name: "+ user.client_name + "\n")
+        if (user.client_id != myself.client_id) {
+            var newUser = document.createElement('li')
+            newUser.appendChild(document.createTextNode(' id: '));
+            newUser.appendChild(document.createTextNode(user.client_id));
+            newUser.appendChild(document.createTextNode(' name: '));
+            newUser.appendChild(document.createTextNode(user.client_name));
+            newUser.appendChild(document.createTextNode(' '));
+            var invite_button = document.createElement("button");
+            invite_button.innerHTML = " Invite ";
+            invite_button.value = user.client_id;
+            invite_button.addEventListener("click", sendInvite, false);
+            newUser.appendChild(invite_button);
+            var bye_button = document.createElement("button");
+            newUser.appendChild(document.createTextNode(' '));
+            bye_button.innerHTML = " Bye ";
+            bye_button.value = user.client_id;
+            bye_button.addEventListener("click", sendBye, false);
+            // bye_button.disabled = true;
+            newUser.appendChild(bye_button);
+            newList.appendChild(newUser);
+
+        }
+    };
+    checkStatus();
+}
+
+function sendShowinfo() {
+    if (myself === null) {
+        alert("user not registered.")
+        return
+    }
+    conn.send(JSON.stringify({
+        type: 'showinfo',
+        source_id: myself.client_id
+    }));
+}
+
+function recvShowinfo(data) {
+    let userinfo = JSON.parse(data)
+    if (myself === null) {
+        myself = userinfo
+        myself.target_id = null;
+        writeText("(self) " + "id: " + myself.client_id + ", name: "+ myself.client_name + "\n")
+    };
+}
+
+// -------------------------------------------------------------------------
+function sendRegister() {
+    let user = {
+        client_name: "webman-" + Math.random().toString(36).substring(7),
+    }
+    conn.send(JSON.stringify({
+        type: 'register',
+        data: JSON.stringify(user)
+    }));
+}
+
+function sendUnregister(user) {
+    conn.send(JSON.stringify({
+        type: 'unregister',
+        data: JSON.stringify(user)
+    }));
+}
+
+// -------------------------------------------------------------------------
+function sendInvite() {     // Button Handler
+    if (peer === null || local_stream === null) {
+        alert("not ready to send invite.")
+        return
+    }
+
+
+    if (myself.target_id) {
+        if (getNameById(myself.target_id) !== null) {
+            alert("already used for " + this.value)
+            return
+        }
+    }
+
+    myself.target_id = this.value;
+    conn.send(JSON.stringify({
+        type: 'invite',
+        source_id: myself.client_id,
+        target_id: myself.target_id
+    }));
+}
+
+function recvInvite(uid) {
+    if (peer === null || local_stream === null) {
+        alert("not ready to recv invite.")
+        sendDecline(uid)
+        return
+    }
+
+    if (myself.target_id === null) {
+
+		myself.target_id = uid;
+		sendAccept(uid);
+
+    } else {
+        sendDecline(uid);
+        console.log("busy with " + myself.target_id)
+    }
+}
+
+function sendBye() {    // Button Handler
+    if (myself.target_id === null) {
+        console.log("not peered")
+        return
+    }
+    conn.send(JSON.stringify({
+        type: 'bye',
+        source_id: myself.client_id,
+        target_id: this.value
+    }));
+    myself.target_id = null
+    closeRemoteVideo()
+    closePeer()
+    openPeer()
+}
+
+function recvBye(uid) {
+    if (myself.target_id === uid) {
+        myself.target_id = null
+        closeRemoteVideo()
+        closePeer()
+        openPeer()
+    } else {
+        console.log("bye ignored")
+    }
+}
+
+function sendAccept(uid) {
+    // console.log(uid)
+    conn.send(JSON.stringify({
+        type: 'accept',
+        source_id: myself.client_id,
+        target_id: uid
+    }));
+}
+
+function recvAccept(uid) {
+    if (myself.target_id === uid) {
+        sendOffer()
+    } else {
+        console.log("accept ignored")
+    }
+}
+
+function sendDecline(uid) {
+    // console.log(uid)
+    conn.send(JSON.stringify({
+        type: 'decline',
+        source_id: myself.client_id,
+        target_id: uid
+    }));
+}
+
+function recvDecline(uid) {
+    alert("declined from " + uid)
+    if (myself.target_id === uid) {
+        myself.target_id = null
+    }
+}
+
+//----------------------------------------------------------------------------------------------------------
+function openLocalVideo() {
+    // let button = document.getElementById("open_video")
+    // button.disabled = true
+	document.getElementById('open_video').style.visibility = 'hidden';
+	navigator.mediaDevices.getUserMedia({
+		video: {width:4096,height:2160},
+		audio: true,
+	}).then((stream) => {
+		local_video.srcObject = stream;
+		local_video.volume = 0;
+        local_stream = stream;
+        writeText("> local video is ready.\n")
+	}).catch(err => {
+		console.log(JSON.stringify(err));
+	});
+};
+
+function closeLocalVideo() {
+    if (local_video) {
+        local_video.srcObject = null
+    }
+}
+
+function closeRemoteVideo() {
+    if (remote_video) {
+        remote_video.srcObject = null
+    }
+}
+
+//----------------------------------------------------------------------------------------------------------
+function openPeer() {
+    // let button = document.getElementById("open_peer")
+    // button.disabled = true
+
+	let ice_host = "49.50.162.98";	// cobot.center
+    let rtc_config = {
+        iceServers: [
+            {urls: "stun:"+ice_host+":3478"},
+            {urls: "turn:"+ice_host+":3478?transport=udp", username: "teamgrit", credential: "teamgrit8266"},
+            {urls: "turn:"+ice_host+":3478?transport=tcp", username: "teamgrit", credential: "teamgrit8266"}
+        ]
+    }
+
+    peer = new RTCPeerConnection(rtc_config);
+
+    peer.ontrack = (evt) => {
+        // console.log(evt);
+        remote_video.srcObject = evt.streams[0];
+    };
+
+    peer.oniceconnectionstatechange = (evt) => {
+        writeText("> ICE Connection("+ ice_host + "): " + peer.iceConnectionState + "\n")
+    }
+
+    peer.onicecandidate = (evt) => {
+        // console.log(evt);
+        sendCandidate2(evt)
+    };
+	dc_con = peer.createDataChannel("control",{negotiated: true, id: 0}) //control data channel 생성
+
+	dc_con.onopen = () => is_target = true
+	dc_con.onclose = () =>is_target = false
+    dc_con.onmessage =function (e) {
+		remote_message =e.data
+    };
+
+    if (local_stream) local_stream.getTracks().forEach(track => peer.addTrack(track, local_stream));
+    writeText("> webrtc peer is ready.\n")
+}
+
+
+
+
+function closePeer() {
+    if (peer === null) {
+        console.log("not opened")
+        return
+    }
+    peer.close();
+    peer = null;
+    writeText("> webrtc peer is closed.\n")
+}
+
+//----------------------------------------------------------------------------------------------------------
+function sendOffer() {
+    if (peer === null) {
+        alert("peer is not ready.")
+        return
+    }
+    peer.createOffer().then((offer) => {
+        return peer.setLocalDescription(offer)
+    }).then(() => {
+        conn.send(JSON.stringify({
+            type: 'offer',
+            source_id: myself.client_id,
+            target_id: myself.target_id,
+            data: peer.localDescription.sdp
+        }));
+    }).catch((e) => {
+        console.error(e);
+    });
+}
+
+function recvOffer(type, data) {
+    peer.setRemoteDescription(new RTCSessionDescription({
+        type: type,
+        sdp: data,
+    })).then((o) => {
+        console.log("set remote for " + type); // o: undefined
+        sendAnswer()
+    }).catch((e) => {
+        console.err(e);
+    });
+}
+
+function sendAnswer() {
+    if (peer === null) {
+        alert("peer is not ready.")
+        return
+    }
+    peer.createAnswer().then((answer) => {
+        return peer.setLocalDescription(answer)
+    }).then(() => {
+        conn.send(JSON.stringify({
+            type: 'answer',
+            source_id: myself.client_id,
+            target_id: myself.target_id,
+            data: peer.localDescription.sdp
+        }));
+    }).catch((e) => {
+        console.error(e);
+    });
+}
+
+function recvAnswer(type, data) {
+    peer.setRemoteDescription(new RTCSessionDescription({
+        type: type,
+        sdp: data,
+    })).then((o) => {
+        console.log("set remote for " + type); // o: undefined
+    }).catch((e) => {
+        console.err(e);
+    });
+}
+
+// -------------------------------------------------------------------------
+// old style of candidate handling
+function sendCandidate(evt) {
+    if (!evt.candidate) {
+        console.log("null candidate")
+        return
+    }
+    // console.log(evt.candidate)
+    conn.send(JSON.stringify({
+        type: 'candidate',
+        data: evt.candidate.candidate,
+        source_id: myself.client_id,
+        target_id: myself.target_id
+    }));
+}
+
+function recvCandidate(data) {
+    // console.log('old style:' + data);
+    const candidate = new RTCIceCandidate({
+        sdpMid: "0",
+        sdpLineIndex: 0,
+        candidate: data
+    })
+    peer.addIceCandidate(candidate)
+}
+
+// new style of candidate handlding : correct use
+function sendCandidate2(evt) {
+    if (!evt.candidate) {
+        console.log("null candidate")
+        return
+    }
+    // console.log(evt.candidate)
+    conn.send(JSON.stringify({
+        type: 'candidate2',
+        data: JSON.stringify(evt.candidate),
+        source_id: myself.client_id,
+        target_id: myself.target_id
+    }));
+}
+
+function recvCandidate2(data) {
+    // console.log('new style:' + data);
+    const candidate2 = JSON.parse(data)
+    peer.addIceCandidate(candidate2)
+}
+
+// -------------------------------------------------------------------------
+function startSignal(otype, oid) {
+    if (window.location.protocol == 'https:') {
+        wsurl = 'wss://' + 'dev-spider-robot.cojam.kr' + ':8267/signal/ws/spider?' + otype + '=' + oid;
+    }
+    else if(window.location.protocol == "file:"){
+        wsurl = 'wss://' +'dev-spider-robot.cojam.kr' + ':8267/signal/ws/spider?' + otype + '=' + oid;
+    }
+    else {
+        wsurl = 'ws://' + 'dev-spider-robot.cojam.kr' + ':8266/signal/ws/spider?' + otype + '=' + oid;
+    }
+
+	conn = new WebSocket(wsurl)
+	writeText("> server address to connect is " + wsurl + "\n")
+
+	conn.onmessage = (evt) => {
+		let d =JSON.parse(evt.data);
+		let type = d['type'];
+        let data = d['data'];
+
+        let source = d['source_id'];    // sender's address
+        let target = d['target_id'];    // receiver's address
+
+        console.log("[Rx] " + type)
+
+		switch (type) {
+        case 'userlist': // <- showlist
+            recvShowlist(data)
+            break;
+        case 'userinfo': // <- showinfo
+            recvShowinfo(data)
+            break;
+        case 'invite':
+            recvInvite(source)
+            console.log("ddddh ")
+            break;
+        case 'bye':
+            recvBye(source)
+            break;
+        case 'accept': // <- invite
+            recvAccept(source)
+            break;
+        case 'decline': // <- invite
+            recvDecline(source)
+            break;
+		case 'offer':
+            recvOffer(type, data)
+			break;
+        case 'answer': // <- offer
+            recvAnswer(type, data)
+            break;
+        case 'candidate': // <- candidate : old style
+            recvCandidate(data)
+            break
+        case 'candidate2': // <- candidate2 : new style
+            recvCandidate2(data)
+            break;
+		case 'ping':
+			// just ignore, for healthcheck.
+			break;
+        case 'sendto': // for custom use
+            // just ignore, if not used.
+            break;
+		default:
+			console.log('unexpected message', type, data);
+		}
+	};
+
+	conn.onopen = (evt) => {
+        sendRegister()
+    }
+
+	conn.onclose = (evt) => {
+		console.log(evt);
+		conn = null;
+        writeText("> websocket closed.\n")
+	};
+}
+
+window.onload = () => {
+    // startSignal("channel", channel_id);
+    startSignal("room", room_id);
+    openLocalVideo();
+    setTimeout(function(){openPeer();}, 4000);
+};
+</script>
+
+</html>
