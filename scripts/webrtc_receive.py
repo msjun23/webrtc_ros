@@ -25,6 +25,7 @@ from sensor_msgs.msg import Image
 
 
 def ReceiveData(lidar_que, camera_que):
+    remote_message = []
     while True:
         remote_message = driver.execute_script("return getData()")
         if remote_message is not None:
