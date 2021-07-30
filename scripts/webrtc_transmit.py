@@ -15,6 +15,7 @@ import platform
 from multiprocessing import Process, Manager
 import time
 import os
+import queue
 # from pathlib import path
 import json
 
@@ -28,14 +29,14 @@ def ScanData(data):
 
     # Sensing Data & Robot parameters
     current_location = [1,1,0]
-    LIDAR_data = data.ranges[:3]
+    LIDAR_data = data
     remote_message = []
 
     #while True:
     send_json = json.dumps({'LIDAR_data': LIDAR_data})
     driver.execute_script('sendData('+send_json+')')                        # Send Data
     remote_message = driver.execute_script("return getData()")
-    print(send_json)
+    #print(send_json)
 
 if __name__=="__main__":
     # Setup webdriver & network
