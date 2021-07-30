@@ -24,6 +24,22 @@ from sensor_msgs.msg import LaserScan
 from sensor_msgs.msg import Image
 
 
+# Setup webdriver & network
+options = webdriver.ChromeOptions()                                     # Webdriver option
+# options.add_argument("--disable-infobars")                            # Don't use infobar
+options.add_argument('--start-fullscreen')                              # Start at F11; Full screan
+options.add_argument("--disable-extensions")                            # Disable Chrome extension program
+options.add_experimental_option("prefs", { \
+    "profile.default_content_setting_values.media_stream_mic": 1,       # Able Media Mike
+    "profile.default_content_setting_values.media_stream_camera": 1,    # Able Media Camera
+    "profile.default_content_setting_values.geolocation": 1,            # Able Location
+    "profile.default_content_setting_values.notifications": 1           # Able Alert
+})
+
+current_os = platform.system()
+driver = webdriver.Chrome(options=options)
+
+
 def ScanData(data):
     #rospy.loginfo(rospy.get_caller_id() + 'Lidar LaserScan data:%s', data.ranges[:3])
 
@@ -56,31 +72,13 @@ if __name__=="__main__":
     # Parallel process
     pool = Pool(2, TransData, (lidar_que, camera_que))
 
-    # Setup webdriver & network
-    options = webdriver.ChromeOptions()                                     # Webdriver option
-    # options.add_argument("--disable-infobars")                            # Don't use infobar
-    options.add_argument('--start-fullscreen')                              # Start at F11; Full screan
-    options.add_argument("--disable-extensions")                            # Disable Chrome extension program
-    options.add_experimental_option("prefs", { \
-        "profile.default_content_setting_values.media_stream_mic": 1,       # Able Media Mike
-        "profile.default_content_setting_values.media_stream_camera": 1,    # Able Media Camera
-        "profile.default_content_setting_values.geolocation": 1,            # Able Location
-        "profile.default_content_setting_values.notifications": 1           # Able Alert
-    })
-
-    current_os = platform.system()
-    driver = webdriver.Chrome(options=options)
-
     abs_path = os.path.abspath("./")
-
     driver.get(url='file:///'+abs_path+'/rail.html')  # Connect to web site
 
-
     # Setup ROS node
-    rospy.init_node('webrtc_transmit');
+    rospy.init_node('webrtc_transmit_jetson');
     rospy.Subscriber('/scan', LaserScan, ScanData)
     rospy.Subscriber('/jetbot_camera/raw', Image, ImageData)
-
 
     # Start running
     rospy.spin()
