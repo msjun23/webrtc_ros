@@ -50,7 +50,7 @@ def ScanData(data):
     #rospy.loginfo(rospy.get_caller_id() + 'Lidar LaserScan data:%s', data)
 
     # Sensing Data & Robot parameters
-    LIDAR_data = data.ranges
+    LIDAR_data = data
 
     #if LIDAR_data is not None:
     send_json = json.dumps({'LIDAR_data': LIDAR_data})
