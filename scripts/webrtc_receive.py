@@ -3,7 +3,7 @@
 ## Base : https://github.com/JeonHyeongJunKW/WebRTC-RAIL.git
 
 ###############################
-######### 2021/07/26 ##########
+######### 2021/07/31 ##########
 #### WebRTC + ROS Melodic #####
 #### Author: Moon Seokjun  ####
 ###############################
@@ -12,7 +12,7 @@
 from selenium import webdriver
 import cv2
 import platform
-from multiprocessing import Process, Manager, Queue, Pool
+from multiprocessing import Process, Manager
 import time
 import os
 # from pathlib import path
@@ -20,8 +20,8 @@ import json
 
 import rospy
 from std_msgs.msg import String
-from sensor_msgs.msg import LaserScan
 from sensor_msgs.msg import Image
+from sensor_msgs.msg import LaserScan
 
 
 # Setup webdriver & network
@@ -38,10 +38,15 @@ options.add_experimental_option("prefs", { \
 
 current_os = platform.system()
 
-if current_os == "Windows":  # Driver for window
-    driver = webdriver.Chrome(executable_path='./Windows/chromedriver', options=options)
-elif current_os == "Linux":  # Driver for Linux
-    driver = webdriver.Chrome(executable_path='./Linux/chromedriver', options=options)
+try:
+    current_os = platform.system()
+
+    if current_os == "Windows":  # Driver for window
+        driver = webdriver.Chrome(executable_path='./Windows/chromedriver', options=options)
+    elif current_os == "Linux":  # Driver for Linux
+        driver = webdriver.Chrome(executable_path='./Linux/chromedriver', options=options)
+except:
+    driver = webdriver.Chrome(options=options)
 
 
 def ReceiveData(lidar_que, camera_que):
@@ -53,12 +58,6 @@ def ReceiveData(lidar_que, camera_que):
 
 
 if __name__=="__main__":
-    lidar_que = Queue()
-    camera_que = Queue()
-
-    # Parallel process
-    pool = Pool(2, ReceiveData, (lidar_que, camera_que))
-
     abs_path = os.path.abspath("./")
     driver.get(url='file:///'+abs_path+'/rail.html')  # Connect to web site
 

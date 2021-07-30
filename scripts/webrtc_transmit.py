@@ -3,7 +3,7 @@
 ## Base : https://github.com/JeonHyeongJunKW/WebRTC-RAIL.git
 
 ###############################
-######### 2021/07/26 ##########
+######### 2021/07/31 ##########
 #### WebRTC + ROS Melodic #####
 #### Author: Moon Seokjun  ####
 ###############################
@@ -12,7 +12,7 @@
 from selenium import webdriver
 import cv2
 import platform
-from multiprocessing import Process, Manager, Queue, Pool
+from multiprocessing import Process, Manager
 import time
 import os
 # from pathlib import path
@@ -21,7 +21,6 @@ import json
 import rospy
 from std_msgs.msg import String
 from sensor_msgs.msg import LaserScan
-from sensor_msgs.msg import Image
 
 
 # Setup webdriver & network
@@ -46,46 +45,25 @@ try:
 except:
     driver = webdriver.Chrome(options=options)
 
+
 def ScanData(data):
-    #rospy.loginfo(rospy.get_caller_id() + 'Lidar LaserScan data:%s', data.ranges[:3])
+    #rospy.loginfo(rospy.get_caller_id() + 'Lidar LaserScan data:%s', data)
 
     # Sensing Data & Robot parameters
-    #current_location = [1,1,0]
-    LIDAR_data = data
-    lidar_que.put(LIDAR_data)
+    LIDAR_data = data.ranges
 
-def ImageData(data):
-    # Camera image data
-    CAMERA_data = data
-    camera_que.put(CAMERA_data)
-
-def TransData(lidar_que, camera_que):
-    while True:
-        LIDAR_data = lidar_que.get()
-        CAMERA_data = camera_que.get()
-
-        if LIDAR_data is not None and CAMERA_data is not None:
-            #print(LIDAR_data)
-            send_json = json.dumps({'LIDAR data': LIDAR_data, 'CAMERA_data': CAMERA_data})
-            driver.execute_script('sendData('+send_json+')')                # Send Data
-            #print(type(send_json))
-            #print(send_json)
+    #if LIDAR_data is not None:
+    send_json = json.dumps({'LIDAR_data': LIDAR_data})
+    driver.execute_script('sendData('+send_json+')')        # Send data
 
 
 if __name__=="__main__":
-    lidar_que = Queue()
-    camera_que = Queue()
-
-    # Parallel process
-    pool = Pool(2, TransData, (lidar_que, camera_que))
-
     abs_path = os.path.abspath("./")
-    driver.get(url='file:///'+abs_path+'/rail.html')  # Connect to web site
+    driver.get(url='file:///'+abs_path+'/rail.html')        # Connect to web site
 
     # Setup ROS node
     rospy.init_node('webrtc_transmit');
     rospy.Subscriber('/scan', LaserScan, ScanData)
-    rospy.Subscriber('/jetbot_camera/raw', Image, ImageData)
 
     # Start running
     rospy.spin()
