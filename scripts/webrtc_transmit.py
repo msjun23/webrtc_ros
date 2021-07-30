@@ -12,33 +12,50 @@
 from selenium import webdriver
 import cv2
 import platform
-from multiprocessing import Process, Manager
+from multiprocessing import Process, Manager, Queue, Pool
 import time
 import os
-import queue
 # from pathlib import path
 import json
 
 import rospy
 from std_msgs.msg import String
 from sensor_msgs.msg import LaserScan
+from sensor_msgs.msg import Image
 
 
 def ScanData(data):
     #rospy.loginfo(rospy.get_caller_id() + 'Lidar LaserScan data:%s', data.ranges[:3])
 
     # Sensing Data & Robot parameters
-    current_location = [1,1,0]
+    #current_location = [1,1,0]
     LIDAR_data = data
-    remote_message = []
+    lidar_que.put(LIDAR_data)
 
-    #while True:
-    send_json = json.dumps({'LIDAR_data': LIDAR_data})
-    driver.execute_script('sendData('+send_json+')')                        # Send Data
-    remote_message = driver.execute_script("return getData()")
-    #print(send_json)
+def ImageData(data):
+    # Camera image data
+    CAMERA_data = data
+    camera_que.put(CAMERA_data)
+
+def TransData(lidar_que, camera_que):
+    while True:
+        LIDAR_data = lidar_que.get()
+        CAMERA_data = camera_que.get()
+
+        if LIDAR_data is not None and CAMERA_data is not None:
+            #print(LIDAR_data)
+            send_json = json.dumps({'LIDAR data': LIDAR_data, 'CAMERA_data': CAMERA_data})
+            driver.execute_script('sendData('+send_json+')')                # Send Data
+            print(send_json)
+
 
 if __name__=="__main__":
+    lidar_que = Queue()
+    camera_que = Queue()
+
+    # Parallel process
+    pool = Pool(2, TransData, (lidar_que, camera_que))
+
     # Setup webdriver & network
     options = webdriver.ChromeOptions()                                     # Webdriver option
     # options.add_argument("--disable-infobars")                            # Don't use infobar
@@ -64,8 +81,9 @@ if __name__=="__main__":
 
 
     # Setup ROS node
-    rospy.init_node('webrtc_ros');
-    rospy.Subscriber('scan', LaserScan, ScanData)
+    rospy.init_node('webrtc_transmit');
+    rospy.Subscriber('/scan', LaserScan, ScanData)
+    rospy.Subscriber('/jetbot_camera/raw', Image, ImageData)
 
 
     # Start running
