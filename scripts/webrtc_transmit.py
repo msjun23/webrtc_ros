@@ -36,13 +36,15 @@ options.add_experimental_option("prefs", { \
     "profile.default_content_setting_values.notifications": 1           # Able Alert
 })
 
-current_os = platform.system()
+try:
+    current_os = platform.system()
 
-if current_os == "Windows":  # Driver for window
-    driver = webdriver.Chrome(executable_path='./Windows/chromedriver', options=options)
-elif current_os == "Linux":  # Driver for Linux
-    driver = webdriver.Chrome(executable_path='./Linux/chromedriver', options=options)
-
+    if current_os == "Windows":  # Driver for window
+        driver = webdriver.Chrome(executable_path='./Windows/chromedriver', options=options)
+    elif current_os == "Linux":  # Driver for Linux
+        driver = webdriver.Chrome(executable_path='./Linux/chromedriver', options=options)
+except:
+    driver = webdriver.Chrome(options=options)
 
 def ScanData(data):
     #rospy.loginfo(rospy.get_caller_id() + 'Lidar LaserScan data:%s', data.ranges[:3])
