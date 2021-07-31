@@ -68,6 +68,7 @@ def ScanData(data):
     driver.execute_script('sendData('+send_json+')')        # Send data
 
 def ControlData():
+    ''' Publish remote_message as String
     pub = rospy.Publisher('remote_message', String, queue_size=1)
 
     msg_dict = {}
@@ -79,7 +80,30 @@ def ControlData():
             msg_dict = json.loads(remote_message)
             rospy.loginfo(rospy.get_caller_id() + ' remote message:%s', msg_dict)
 
-            pub.publish(remote_message)
+            pub.publish(remote_message)'''
+
+    # Publish remote_message as Twist -> cmd_vel
+    pub = rospy.Publisher('cmd_vel', Twist, queue_size=1)
+
+    msg_dict = {}
+    twist = Twist()
+    while not rospy.is_shutdown():
+        remote_message = driver.execute_script("return getData()")
+
+        if type(remote_message) != type(None):
+            # type of remote message is unicode
+            msg_dict = json.loads(remote_message)
+            rospy.loginfo(rospy.get_caller_id() + ' remote message[cmd_vel]:%s', msg_dict['cmd_vel'])
+
+            # Copy state into twist message.
+            twist.linear.x = msg_dict['cmd_vel'][0]
+            twist.linear.y = msg_dict['cmd_vel'][1]
+            twist.linear.z = msg_dict['cmd_vel'][2]
+            twist.angular.x = msg_dict['cmd_vel'][3]
+            twist.angular.y = msg_dict['cmd_vel'][4]
+            twist.angular.z = msg_dict['cmd_vel'][5]
+
+            pub.publish(twist)
 
 
 if __name__=="__main__":
